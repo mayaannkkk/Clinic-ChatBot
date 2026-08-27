@@ -17,7 +17,7 @@ If the selected time is busy, the chatbot suggests 1–2 nearby quieter time slo
 
 ## Demo
 
-🔗 Live Demo: [https://your-streamlit-app-url.streamlit.app](https://clinic-chatbot-01.streamlit.app/)
+🔗 Live Demo: https://clinic-chatbot-01.streamlit.app/
 
 ---
 

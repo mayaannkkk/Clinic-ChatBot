@@ -34,6 +34,7 @@ def suggest(dt_str):
 def email(name, mail, dt):
     return f"""--- MOCK EMAIL ---
 To: {mail}
+
 Subject: Appointment Confirmation for {name}
 
 Dear {name},

@@ -1,16 +1,23 @@
-🏥 Clinic Chatbot
-Overview
+# 🏥 Clinic Chatbot
+
+## Overview
 
 A simple clinic chatbot built using Streamlit and Scikit-Learn.
 
-The chatbot helps patients:
+The chatbot allows patients to:
 
-Book a fixed appointment
-Check clinic busyness for a walk-in visit
+- Book a fixed appointment
+- Check clinic busyness for a walk-in visit
 
-For walk-in visits, a trained machine learning model predicts whether the clinic is likely to be Busy, Normal, or Free based on the selected date and time.
+For walk-in visits, a trained machine learning model predicts whether the clinic is likely to be **Free**, **Normal**, or **Busy** based on the selected date and time.
 
-Architecture
+If the selected time is busy, the chatbot suggests 1–2 nearby quieter time slots.
+
+---
+
+## Architecture
+
+```text
 Streamlit UI
       │
       ▼
@@ -18,52 +25,53 @@ Chatbot
 (Greet Patient)
       │
       ▼
-─────────────────────────────
-│                           │
-▼                           ▼
+ ┌──────────────┴──────────────┐
+ │                             │
+ ▼                             ▼
 
-Appointment            Walk-In Visit
+Appointment              Walk-In Visit
 
-│                       │
-▼                       ▼
+ │                             │
+ ▼                             ▼
 
-Ask Name               Ask Date & Time
-Ask Date & Time             │
-Ask Email                   ▼
-│                     ML Model Prediction
-▼                           │
-Send Confirmation           ▼
-(Mock Email)         ┌───────────────┐
-                     │ Busy          │
-                     │ Normal / Free │
-                     └───────────────┘
-                           │
-                ┌──────────┴──────────┐
-                ▼                     ▼
+Collect Name         Collect Date & Time
+Collect Date/Time            │
+Collect Email                ▼
+ │                     ML Model Prediction
+ ▼                             │
+Send Confirmation             ▼
+(Mock Email)         Busy / Normal / Free
+                              │
+                    ┌─────────┴─────────┐
+                    ▼                   ▼
 
-         Suggest 1–2          Confirm Good
-       Alternative Times          Time
-How the Chatbot Uses the ML Model
-Appointment Path
-User selects Appointment
-Chatbot collects:
-Name
-Date & Time
-Email
-Appointment is confirmed.
-A mock confirmation email is displayed.
-Walk-In Path
-User selects Walk-In Visit
-Chatbot asks for the planned visit date and time.
-The chatbot sends the date and time to the trained ML model.
-The model predicts the expected clinic load.
-The prediction is classified as:
-Busy
-Normal
-Free
-If Busy, the chatbot suggests 1–2 nearby quieter time slots.
-Otherwise, the chatbot confirms it is a good time to visit.
-Project Structure
+            Suggest Alternatives   Confirm Good Time
+```
+
+---
+
+## How the Chatbot Uses the ML Model
+
+### Appointment Path
+- Collects name, date/time, and email.
+- Confirms the appointment.
+- Displays a mock confirmation email.
+
+### Walk-In Path
+- Collects the planned visit date and time.
+- Sends the information to the trained ML model.
+- The model predicts the expected clinic load.
+- Returns:
+  - Free
+  - Normal
+  - Busy
+- If Busy, the chatbot suggests nearby quieter time slots.
+
+---
+
+## Project Structure
+
+```text
 Clinic-Chatbot/
 │
 ├── app.py
@@ -74,19 +82,32 @@ Clinic-Chatbot/
 ├── predict_test.ipynb
 ├── requirements.txt
 └── README.md
-How to Run
-Install Dependencies
+```
+
+---
+
+## Run the Application
+
+Install dependencies:
+
+```bash
 pip install -r requirements.txt
-Run the Application
+```
+
+Start the chatbot:
+
+```bash
 streamlit run app.py
+```
 
-Open the browser and interact with the chatbot.
+---
 
-Technologies Used
-Streamlit
-Pandas
-NumPy
-Scikit-Learn
-Pickle
+## Technologies Used
+
+- Python
+- Streamlit
+- Pandas
+- NumPy
+- Scikit-Learn
 
 This project demonstrates how a machine learning model can be integrated into a conversational clinic assistant to help patients choose less crowded walk-in visit times.

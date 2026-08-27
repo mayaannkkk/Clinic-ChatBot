@@ -40,12 +40,21 @@ Collect Email                ▼
  │                     ML Model Prediction
  ▼                             │
 Send Confirmation             ▼
-(Mock Email)         Busy / Normal / Free
+(Mock Email)          Busy / Normal / Free
                               │
-                    ┌─────────┴─────────┐
-                    ▼                   ▼
+                              ▼
+                    ┌─────────────────┐
+                    │   Is Busy ?     │
+                    └─────────────────┘
+                          │
+               ┌──────────┴──────────┐
+               │                     │
+              Yes                    No
+               │                     │
+               ▼                     ▼
 
-            Suggest Alternatives   Confirm Good Time
+     Suggest 1–2 Alternative   Confirm Good Time
+            Time Slots
 ```
 
 ---
@@ -68,21 +77,6 @@ Send Confirmation             ▼
 - If Busy, the chatbot suggests nearby quieter time slots.
 
 ---
-
-## Project Structure
-
-```text
-Clinic-Chatbot/
-│
-├── app.py
-├── clinic_model.pkl
-├── clinic_visits.csv
-├── feature_engineering.py
-├── ml_model.ipynb
-├── predict_test.ipynb
-├── requirements.txt
-└── README.md
-```
 
 ---
 

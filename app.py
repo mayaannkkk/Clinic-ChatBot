@@ -209,11 +209,14 @@ if prompt := st.chat_input("Type here..."):
     elif step == "appt_dt":
         try:
             dt = pd.to_datetime(prompt)
-            d["dt"] = dt
-            d["date_str"] = dt.strftime('%Y-%m-%d')
-            d["time_str"] = dt.strftime('%I:%M %p').lstrip('0')
-            say("assistant", "Your full name?")
-            st.session_state.step = "appt_name"
+            if not (8 <= dt.hour < 12 or 16 <= dt.hour < 22):
+                say("assistant", "That time is outside clinic hours (8:00 AM–12:00 PM and 4:00 PM–10:00 PM). Please enter a time within those windows.")
+            else:
+                d["dt"] = dt
+                d["date_str"] = dt.strftime('%Y-%m-%d')
+                d["time_str"] = dt.strftime('%I:%M %p').lstrip('0')
+                say("assistant", "Your full name?")
+                st.session_state.step = "appt_name"
         except:
             say("assistant", "Invalid format. Use like '2026-08-29 9:30 AM'")
 
@@ -270,6 +273,6 @@ if prompt := st.chat_input("Type here..."):
             say("assistant", f"Error: {e}. Try again.")
 
     elif step == "done":
-        say("assistant", "Thank you! Type 'start over' (or use the sidebar button) to begin a new conversation.")
+        say("assistant", "Thank you! Click 'Start Over' below (or type 'start over') to begin a new conversation.")
 
     st.rerun()

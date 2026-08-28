@@ -3,6 +3,8 @@ import pickle
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import re
+import difflib
 import smtplib
 import ssl
 from email.mime.text import MIMEText
@@ -22,6 +24,12 @@ def get_secret(key):
         return st.secrets[key]
     except (KeyError, FileNotFoundError):
         return os.environ.get(key)
+
+# ---------- Email validation ----------
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+def is_valid_email(addr: str) -> bool:
+    return bool(EMAIL_RE.match(addr.strip()))
 
 # ---------- Email sender (real SMTP) ----------
 def send_real_email(to_email, name, date_str, time_str):
@@ -66,6 +74,7 @@ Thank you for choosing our clinic.
 def mock_email(name, mail, date_str, time_str):
     return f"""--- MOCK EMAIL (real email not sent) ---
 To: {mail}
+
 Subject: Appointment Confirmation for {name}
 
 Dear {name},
@@ -81,7 +90,7 @@ def load_model():
     return pickle.load(open('clinic_model.pkl', 'rb'))
 
 model = load_model()
-LOW, HIGH = 2.0, 4.0
+LOW, HIGH = 2.0, 4.0  # adjust to your percentiles
 
 def classify(v):
     return "Free" if v <= LOW else "Normal" if v <= HIGH else "Busy"
@@ -104,21 +113,57 @@ def suggest(dt_str):
     good = [t for t in times if t[1] != "Busy"]
     return good[:2] if good else times[:2]
 
-# ---------- Intent classification ----------
+# ---------- Intent classification (typo-tolerant) ----------
+APPT_KEYWORDS = ["appointment", "book", "booking", "schedule", "reserve", "reservation", "appt", "fixed"]
+WALK_KEYWORDS = ["walk", "walkin", "walk-in", "visit", "direct", "directly", "come", "coming", "drop", "show"]
+RESTART_KEYWORDS = ["restart", "reset", "start over", "startover", "begin again", "new appointment"]
+
+def _fuzzy_contains(word: str, keywords: list, cutoff: float = 0.78) -> bool:
+    """True if `word` closely matches (or contains/is contained by) any keyword,
+    tolerating small typos like missing/swapped letters."""
+    if any(kw in word or word in kw for kw in keywords if len(word) >= 3):
+        return True
+    return bool(difflib.get_close_matches(word, keywords, n=1, cutoff=cutoff))
+
 def classify_intent(text: str):
-    text = text.lower()
-    appt_keywords = ["appointment", "book", "schedule", "reserve", "appt", "fixed"]
-    walk_keywords = ["walk", "visit", "direct", "come", "drop", "show", "walkin", "walk-in"]
-    if any(kw in text for kw in appt_keywords):
+    text = text.lower().strip()
+    words = re.findall(r"[a-z\-]+", text)
+
+    # Exact substring check first (fast path, no false positives)
+    if any(kw in text for kw in APPT_KEYWORDS):
         return "appointment"
-    if any(kw in text for kw in walk_keywords):
+    if any(kw in text for kw in WALK_KEYWORDS):
         return "walk-in"
+
+    # Fuzzy fallback for typos, e.g. "wnat" -> "want" isn't a keyword itself,
+    # but this catches things like "visti", "boook", "shedule", etc.
+    for w in words:
+        if len(w) < 3:
+            continue
+        if _fuzzy_contains(w, APPT_KEYWORDS):
+            return "appointment"
+        if _fuzzy_contains(w, WALK_KEYWORDS):
+            return "walk-in"
     return None
+
+def is_restart_request(text: str) -> bool:
+    text = text.lower().strip()
+    return any(kw in text for kw in RESTART_KEYWORDS)
+
+def reset_conversation():
+    st.session_state.step = "greeting"
+    st.session_state.msgs = []
+    st.session_state.data = {}
 
 # ---------- Streamlit UI ----------
 st.set_page_config(page_title="Clinic Chatbot", page_icon="💬")
 st.title("💬 Clinic Chatbot")
 st.header("Hello, Welcome to the Clinic Chatbot")
+
+with st.sidebar:
+    if st.button("Start Over"):
+        reset_conversation()
+        st.rerun()
 
 if "step" not in st.session_state:
     st.session_state.step = "greeting"
@@ -137,11 +182,16 @@ def say(role, text):
         st.markdown(text)
 
 if st.session_state.step == "greeting":
-    say("assistant", "Would you like to book an appointment or come in for a walk-in visit?")
+    say("assistant", "Would you like a fixed appointment, or a walk-in visit?")
     st.session_state.step = "choice"
 
 if prompt := st.chat_input("Type here..."):
     say("user", prompt)
+
+    if is_restart_request(prompt):
+        reset_conversation()
+        st.rerun()
+
     step = st.session_state.step
     d = st.session_state.data
 
@@ -154,7 +204,7 @@ if prompt := st.chat_input("Type here..."):
             say("assistant", "Enter date & time you plan to come (e.g., 2026-08-29 9:30 AM):")
             st.session_state.step = "walk_dt"
         else:
-            say("assistant", "I didn't understand. Would you like to book an appointment or come in for a walk-in visit?")
+            say("assistant", "I didn't understand. Would to like to book an appointment or want to visit as a walk-in?")
 
     elif step == "appt_dt":
         try:
@@ -177,7 +227,7 @@ if prompt := st.chat_input("Type here..."):
 
     elif step == "appt_email":
         email_addr = prompt.strip()
-        if "@" in email_addr and "." in email_addr:
+        if is_valid_email(email_addr):
             d["email"] = email_addr
             # Try to send real email
             success, msg = send_real_email(
@@ -187,39 +237,39 @@ if prompt := st.chat_input("Type here..."):
                 d["time_str"]
             )
             if success:
-                st.success("📧 Real email sent to " + email_addr)
-                say("assistant", f" Appointment confirmed! A confirmation email has been sent to {email_addr}.")
+                st.success("Real email sent to " + email_addr)
+                say("assistant", f"Appointment confirmed! A confirmation email has been sent to {email_addr}.")
             else:
                 # Show the exact error in red
-                st.error(f" Email error: {msg}")
+                st.error(f"Email error: {msg}")
                 # Fallback to mock email
-                say("assistant", f" Could not send real email. Showing mock instead.\n\n{mock_email(d['name'], email_addr, d['date_str'], d['time_str'])}")
+                say("assistant", f"Could not send real email. Showing mock instead.\n\n{mock_email(d['name'], email_addr, d['date_str'], d['time_str'])}")
             st.session_state.step = "done"
         else:
-            say("assistant", "Invalid email.")
+            say("assistant", "That doesn't look like a valid email address. Please enter it like name@example.com")
 
     elif step == "walk_dt":
         try:
             dt = pd.to_datetime(prompt)
             status = predict(dt.strftime('%Y-%m-%d %H:%M'))
-            reply = f"🔍 **Prediction:** {status}\n\n"
+            reply = f"**Prediction:** {status}\n\n"
             if status == "Busy":
-                reply += " Busy. Quieter times nearby:\n"
+                reply += "Busy. Quieter times nearby:\n"
                 sugg = suggest(dt.strftime('%Y-%m-%d %H:%M'))
                 for t, s in sugg:
                     reply += f"• {t} (predicted {s})\n"
                 if not sugg:
                     reply += "No alternatives – try another session."
             elif status == "Normal":
-                reply += " It's a good time to visit."
+                reply += "It's a good time to visit."
             else:
-                reply += " It's a good time to visit."
+                reply += "It's a good time to visit."
             say("assistant", reply)
             st.session_state.step = "done"
         except Exception as e:
             say("assistant", f"Error: {e}. Try again.")
 
     elif step == "done":
-        say("assistant", "Thank you! Refresh to start over.")
+        say("assistant", "Thank you! Type 'start over' (or use the sidebar button) to begin a new conversation.")
 
     st.rerun()

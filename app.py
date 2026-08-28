@@ -64,15 +64,18 @@ if st.session_state.step == "greeting":
     st.session_state.step = "choice"
 
 if prompt := st.chat_input("Type here..."):
-    say("user", prompt)
+    # Normalise input: strip spaces, lower case
+    cmd = prompt.strip().lower()
+    say("user", prompt)   # show original user input
     step = st.session_state.step
     d = st.session_state.data
 
     if step == "choice":
-        if prompt.lower() == "appointment":
+        # Accept multiple variants
+        if cmd in ["appointment", "appt"]:
             say("assistant", "Enter date & time (e.g., 2026-08-29 9:30 AM):")
             st.session_state.step = "appt_dt"
-        elif prompt.lower() == "walk-in":
+        elif cmd in ["walk-in", "walkin", "walk in"]:
             say("assistant", "Enter date & time you plan to come (e.g., 2026-08-29 9:30 AM):")
             st.session_state.step = "walk_dt"
         else:
@@ -80,7 +83,7 @@ if prompt := st.chat_input("Type here..."):
 
     elif step == "appt_dt":
         try:
-            dt = pd.to_datetime(prompt)
+            dt = pd.to_datetime(prompt)   # keep original prompt for parsing
             d["dt"] = dt
             say("assistant", "Your full name?")
             st.session_state.step = "appt_name"

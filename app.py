@@ -9,7 +9,7 @@ def load_model():
     return pickle.load(open('clinic_model.pkl', 'rb'))
 
 model = load_model()
-LOW, HIGH = 2.0, 4.0  # adjust to your percentiles
+LOW, HIGH = 2.0, 4.0  
 
 def classify(v): return "Free" if v <= LOW else "Normal" if v <= HIGH else "Busy"
 
@@ -99,7 +99,7 @@ if prompt := st.chat_input("Type here..."):
     elif step == "appt_email":
         if "@" in prompt and "." in prompt:
             d["email"] = prompt
-            say("assistant", f"✅ Confirmed!\n\n{email(d['name'], d['email'], d['dt'])}")
+            say("assistant", f" Confirmed!\n\n{email(d['name'], d['email'], d['dt'])}")
             st.session_state.step = "done"
         else:
             say("assistant", "Invalid email.")
@@ -110,16 +110,16 @@ if prompt := st.chat_input("Type here..."):
             status = predict(dt.strftime('%Y-%m-%d %H:%M'))
             reply = f"🔍 **Prediction:** {status}\n\n"
             if status == "Busy":
-                reply += "⚠️ Busy. Quieter times nearby:\n"
+                reply += " Busy. Quieter times nearby:\n"
                 sugg = suggest(dt.strftime('%Y-%m-%d %H:%M'))
                 for t, s in sugg:
                     reply += f"• {t} (predicted {s})\n"
                 if not sugg:
                     reply += "No alternatives – try another session."
             elif status == "Normal":
-                reply += "ℹ️ It's a good time to visit."
+                reply += "It's a good time to visit."
             else:
-                reply += "✅ It's a good time to visit."
+                reply += " It's a good time to visit."
             say("assistant", reply)
             st.session_state.step = "done"
         except Exception as e:

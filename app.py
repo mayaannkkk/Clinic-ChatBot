@@ -137,7 +137,7 @@ def say(role, text):
         st.markdown(text)
 
 if st.session_state.step == "greeting":
-    say("assistant", "Would you like a fixed appointment, or a walk-in visit? (You can say things like 'I want to book' or 'I want to visit')")
+    say("assistant", "Would you like to book an appointment or come in for a walk-in visit?")
     st.session_state.step = "choice"
 
 if prompt := st.chat_input("Type here..."):

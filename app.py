@@ -156,36 +156,17 @@ def reset_conversation():
     st.session_state.msgs = []
     st.session_state.data = {}
 
-# ---------- Date/time validation ----------
-def validate_datetime_input(text: str):
-    """
-    Parse a free-text date/time string. Returns (dt, error_message).
-    On success: (datetime, None)
-    On failure: (None, a specific, human-readable explanation of what's wrong)
-    """
-    text = text.strip()
+# ---------- Working-hour time slots for the picker ----------
+def generate_time_slots(interval_minutes: int = 15):
+    """Returns a list of datetime.time objects that fall within clinic hours
+    (8:00-11:59 AM and 4:00-9:59 PM), at the given interval."""
+    slots = []
+    for hour in list(range(8, 12)) + list(range(16, 22)):
+        for minute in range(0, 60, interval_minutes):
+            slots.append(datetime(2000, 1, 1, hour, minute).time())
+    return slots
 
-    # Look for a YYYY-MM-DD (or YYYY/MM/DD) date portion so we can give a
-    # precise reason when the day doesn't exist in that month (e.g. Feb 30).
-    m = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', text)
-    if m:
-        year, month, day = (int(g) for g in m.groups())
-        if not (1 <= month <= 12):
-            return None, f"'{month}' isn't a valid month — please use a month between 1 and 12."
-        days_in_month = calendar.monthrange(year, month)[1]
-        if not (1 <= day <= days_in_month):
-            month_name = calendar.month_name[month]
-            return None, (
-                f"{month_name} {year} only has {days_in_month} days, "
-                f"so '{day}' isn't a valid date. Please pick a day between 1 and {days_in_month}."
-            )
-
-    try:
-        dt = pd.to_datetime(text)
-    except Exception:
-        return None, "I couldn't understand that date/time. Please use a format like '2026-08-29 9:30 AM'."
-
-    return dt, None
+TIME_SLOTS = generate_time_slots()
 
 
 st.set_page_config(page_title="Clinic Chatbot", page_icon="💬")
@@ -217,6 +198,71 @@ if st.session_state.step == "greeting":
     say("assistant", "Would you like a fixed appointment, or a walk-in visit?")
     st.session_state.step = "choice"
 
+def handle_appt_datetime(dt):
+    """Shared logic for confirming an appointment date/time, used by both
+    typed input and the calendar picker."""
+    d = st.session_state.data
+    if not (8 <= dt.hour < 12 or 16 <= dt.hour < 22):
+        say("assistant", "That time is outside clinic hours (8:00 AM–12:00 PM and 4:00 PM–10:00 PM). Please choose a time within those windows.")
+        return
+    d["dt"] = dt
+    d["date_str"] = dt.strftime('%Y-%m-%d')
+    d["time_str"] = dt.strftime('%I:%M %p').lstrip('0')
+    say("assistant", "Your full name?")
+    st.session_state.step = "appt_name"
+
+def handle_walk_datetime(dt):
+    """Shared logic for checking a walk-in date/time, used by both
+    typed input and the calendar picker."""
+    try:
+        status = predict(dt.strftime('%Y-%m-%d %H:%M'))
+        reply = f"**Prediction:** {status}\n\n"
+        if status == "Busy":
+            reply += "Busy. Quieter times nearby:\n"
+            sugg = suggest(dt.strftime('%Y-%m-%d %H:%M'))
+            for t, s in sugg:
+                reply += f"• {t} (predicted {s})\n"
+            if not sugg:
+                reply += "No alternatives – try another session."
+        elif status == "Normal":
+            reply += "It's a good time to visit."
+        else:
+            reply += "It's a good time to visit."
+        say("assistant", reply)
+        st.session_state.step = "done"
+    except Exception as e:
+        say("assistant", f"Error: {e}. Try again.")
+
+def datetime_picker(key_prefix, on_confirm):
+    """Calendar date picker + working-hours-only time dropdown.
+    This is the only way to select a date/time — no free typing."""
+    st.markdown("**Pick a date & time:**")
+    c1, c2 = st.columns(2)
+    with c1:
+        picked_date = st.date_input(
+            "Date",
+            value=datetime.now().date(),
+            min_value=datetime.now().date(),
+            key=f"{key_prefix}_date",
+        )
+    with c2:
+        picked_time = st.selectbox(
+            "Time",
+            options=TIME_SLOTS,
+            format_func=lambda t: t.strftime('%I:%M %p').lstrip('0'),
+            key=f"{key_prefix}_time",
+        )
+    if st.button("Confirm date & time", key=f"{key_prefix}_confirm"):
+        dt = datetime.combine(picked_date, picked_time)
+        say("user", dt.strftime('%Y-%m-%d %I:%M %p'))
+        on_confirm(dt)
+        st.rerun()
+
+if st.session_state.step == "appt_dt":
+    datetime_picker("appt", handle_appt_datetime)
+elif st.session_state.step == "walk_dt":
+    datetime_picker("walk", handle_walk_datetime)
+
 if prompt := st.chat_input("Type here..."):
     say("user", prompt)
 
@@ -230,26 +276,16 @@ if prompt := st.chat_input("Type here..."):
     if step == "choice":
         intent = classify_intent(prompt)
         if intent == "appointment":
-            say("assistant", "Enter date & time (e.g., 2026-08-29 9:30 AM):")
+            say("assistant", "Great! Please pick your appointment date & time using the calendar below.")
             st.session_state.step = "appt_dt"
         elif intent == "walk-in":
-            say("assistant", "Enter date & time you plan to come (e.g., 2026-08-29 9:30 AM):")
+            say("assistant", "Great! Please pick the date & time you plan to come using the calendar below.")
             st.session_state.step = "walk_dt"
         else:
             say("assistant", "I didn't understand. Would to like to book an appointment or want to visit as a walk-in?")
 
     elif step == "appt_dt":
-        dt, err = validate_datetime_input(prompt)
-        if err:
-            say("assistant", err)
-        elif not (8 <= dt.hour < 12 or 16 <= dt.hour < 22):
-            say("assistant", "That time is outside clinic hours (8:00 AM–12:00 PM and 4:00 PM–10:00 PM). Please enter a time within those windows.")
-        else:
-            d["dt"] = dt
-            d["date_str"] = dt.strftime('%Y-%m-%d')
-            d["time_str"] = dt.strftime('%I:%M %p').lstrip('0')
-            say("assistant", "Your full name?")
-            st.session_state.step = "appt_name"
+        say("assistant", "Please use the calendar and time dropdown above to select your appointment date & time.")
 
     elif step == "appt_name":
         if prompt.strip():
@@ -283,28 +319,7 @@ if prompt := st.chat_input("Type here..."):
             say("assistant", "That doesn't look like a valid email address. Please enter it like name@example.com")
 
     elif step == "walk_dt":
-        dt, err = validate_datetime_input(prompt)
-        if err:
-            say("assistant", err)
-        else:
-            try:
-                status = predict(dt.strftime('%Y-%m-%d %H:%M'))
-                reply = f"**Prediction:** {status}\n\n"
-                if status == "Busy":
-                    reply += "Busy. Quieter times nearby:\n"
-                    sugg = suggest(dt.strftime('%Y-%m-%d %H:%M'))
-                    for t, s in sugg:
-                        reply += f"• {t} (predicted {s})\n"
-                    if not sugg:
-                        reply += "No alternatives – try another session."
-                elif status == "Normal":
-                    reply += "It's a good time to visit."
-                else:
-                    reply += "It's a good time to visit."
-                say("assistant", reply)
-                st.session_state.step = "done"
-            except Exception as e:
-                say("assistant", f"Error: {e}. Try again.")
+        say("assistant", "Please use the calendar and time dropdown above to select your date & time.")
 
     elif step == "done":
         say("assistant", "Thank you! Click 'Start Over' below (or type 'start over') to begin a new conversation.")

@@ -185,6 +185,56 @@ if st.session_state.step == "greeting":
     say("assistant", "Would you like a fixed appointment, or a walk-in visit?")
     st.session_state.step = "choice"
 
+def process_appt_datetime(dt):
+    d = st.session_state.data
+    if not (8 <= dt.hour < 12 or 16 <= dt.hour < 22):
+        say("assistant", "That time is outside clinic hours (8:00 AM–12:00 PM and 4:00 PM–10:00 PM). Please pick a time within those windows.")
+        return
+    d["dt"] = dt
+    d["date_str"] = dt.strftime('%Y-%m-%d')
+    d["time_str"] = dt.strftime('%I:%M %p').lstrip('0')
+    say("assistant", "Your full name?")
+    st.session_state.step = "appt_name"
+
+def process_walk_datetime(dt):
+    try:
+        status = predict(dt.strftime('%Y-%m-%d %H:%M'))
+        reply = f"**Prediction:** {status}\n\n"
+        if status == "Busy":
+            reply += "Busy. Quieter times nearby:\n"
+            sugg = suggest(dt.strftime('%Y-%m-%d %H:%M'))
+            for t, s in sugg:
+                reply += f"• {t} (predicted {s})\n"
+            if not sugg:
+                reply += "No alternatives – try another session."
+        elif status == "Normal":
+            reply += "It's a good time to visit."
+        else:
+            reply += "It's a good time to visit."
+        say("assistant", reply)
+        st.session_state.step = "done"
+    except Exception as e:
+        say("assistant", f"Error: {e}. Try again.")
+
+def datetime_picker(key_prefix, on_confirm):
+    """Reliable date/time picker so users never have to type a date string."""
+    with st.form(key=f"{key_prefix}_form", clear_on_submit=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            picked_date = st.date_input("Date", value=datetime.now().date(), key=f"{key_prefix}_date")
+        with c2:
+            picked_time = st.time_input("Time", value=datetime.now().time().replace(second=0, microsecond=0), key=f"{key_prefix}_time")
+        submitted = st.form_submit_button("Confirm date & time")
+    if submitted:
+        dt = datetime.combine(picked_date, picked_time)
+        on_confirm(dt)
+        st.rerun()
+
+if st.session_state.step == "appt_dt":
+    datetime_picker("appt", process_appt_datetime)
+elif st.session_state.step == "walk_dt":
+    datetime_picker("walk", process_walk_datetime)
+
 if prompt := st.chat_input("Type here..."):
     say("user", prompt)
 
@@ -198,27 +248,16 @@ if prompt := st.chat_input("Type here..."):
     if step == "choice":
         intent = classify_intent(prompt)
         if intent == "appointment":
-            say("assistant", "Enter date & time (e.g., 2026-08-29 9:30 AM):")
+            say("assistant", "Great — please pick your appointment date & time using the picker below.")
             st.session_state.step = "appt_dt"
         elif intent == "walk-in":
-            say("assistant", "Enter date & time you plan to come (e.g., 2026-08-29 9:30 AM):")
+            say("assistant", "Great — please pick the date & time you plan to come using the picker below.")
             st.session_state.step = "walk_dt"
         else:
             say("assistant", "I didn't understand. Would to like to book an appointment or want to visit as a walk-in?")
 
     elif step == "appt_dt":
-        try:
-            dt = pd.to_datetime(prompt)
-            if not (8 <= dt.hour < 12 or 16 <= dt.hour < 22):
-                say("assistant", "That time is outside clinic hours (8:00 AM–12:00 PM and 4:00 PM–10:00 PM). Please enter a time within those windows.")
-            else:
-                d["dt"] = dt
-                d["date_str"] = dt.strftime('%Y-%m-%d')
-                d["time_str"] = dt.strftime('%I:%M %p').lstrip('0')
-                say("assistant", "Your full name?")
-                st.session_state.step = "appt_name"
-        except:
-            say("assistant", "Invalid format. Use like '2026-08-29 9:30 AM'")
+        say("assistant", "Please use the date & time picker above (or below the chat) instead of typing — it avoids formatting errors.")
 
     elif step == "appt_name":
         if prompt.strip():

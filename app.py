@@ -160,11 +160,6 @@ st.set_page_config(page_title="Clinic Chatbot", page_icon="💬")
 st.title("💬 Clinic Chatbot")
 st.header("Hello, Welcome to the Clinic Chatbot")
 
-with st.sidebar:
-    if st.button("Start Over"):
-        reset_conversation()
-        st.rerun()
-
 if "step" not in st.session_state:
     st.session_state.step = "greeting"
 if "msgs" not in st.session_state:
@@ -175,6 +170,11 @@ if "data" not in st.session_state:
 for m in st.session_state.msgs:
     with st.chat_message(m[0]):
         st.markdown(m[1])
+
+if st.session_state.step == "done":
+    if st.button("Start Over"):
+        reset_conversation()
+        st.rerun()
 
 def say(role, text):
     st.session_state.msgs.append((role, text))
